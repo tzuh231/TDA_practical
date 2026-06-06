@@ -7,7 +7,14 @@ authors = [
     { name = "maxjost42", email = "max.jost@student.tugraz.at" }
 ]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "ipympl>=0.10.0",
+    "ipython>=9.14.1",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.9",
+    "numpy>=2.4.6",
+    "pandas>=3.0.3",
+]
 
 [project.scripts]
 tda-practical = "tda_practical:main"
