@@ -219,3 +219,9 @@ __marimo__/
 
 #Mac OS
 .DS_Store
+
+#Data files
+data/HSall_members.csv
+data/HSall_parties.csv
+data/HSall_rollcalls.csv
+data/HSall_votes.csv
