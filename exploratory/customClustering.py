@@ -1,5 +1,7 @@
 
 from sklearn.cluster import AgglomerativeClustering
+import numpy as np
+from typing import Dict
 
 class DynamicSingleLinkage:
     def __init__(self, N_bins:int = 30, lowerMergerThreshold:float = 0.1, debug:bool = False):
@@ -23,6 +25,25 @@ class DynamicSingleLinkage:
         # TODO: implement the dendogram/histogram epsilon optimization
         #       use the base Clusterer for the dendograms
         # optimal_eps = 6.7
+        # Build SciPy linkage matrix for the dendrogram
+
+        model = self.baseClusterer.fit(X)
+        n = len(X)
+        counts = np.zeros(len(model.children_))
+
+        merge_distance = np.percentile(model.distances_, self.lowerMergerThreshold * 100)
+
+        for i, (left, right) in enumerate(model.children_):
+            counts[i] = (
+                (1 if left < n else counts[left - n])
+                + (1 if right < n else counts[right - n])
+            )
+
+        linkage_matrix = np.column_stack([
+            model.children_,
+            model.distances_,
+            counts,
+        ])
 
         if self.debug:
             print("saving  dendogram/histogram")
@@ -44,7 +65,7 @@ class DynamicSingleLinkage:
         #    linkage="single")
 
         self.actualClusterer = AgglomerativeClustering(
-            distance_threshold=0.5,
+            distance_threshold=merge_distance,
             n_clusters=None,
             linkage="single")
         return self.actualClusterer.fit_predict(X)
