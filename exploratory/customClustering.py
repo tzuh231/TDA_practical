@@ -21,16 +21,12 @@ class DynamicSingleLinkage:
         self.actualClusterer : AgglomerativeClustering = None
 
     def fit_predict(self, X):
-
-        # TODO: implement the dendogram/histogram epsilon optimization
-        #       use the base Clusterer for the dendograms
-        # optimal_eps = 6.7
-        # Build SciPy linkage matrix for the dendrogram
-
+        # Use the base clusterer to compute the "optimal" epsilon
         model = self.baseClusterer.fit(X)
         n = len(X)
         counts = np.zeros(len(model.children_))
 
+        # Take the epsilon for which the lowerMergerThreshold percentile of the distances is below
         merge_distance = np.percentile(model.distances_, self.lowerMergerThreshold * 100)
 
         for i, (left, right) in enumerate(model.children_):
@@ -39,30 +35,18 @@ class DynamicSingleLinkage:
                 + (1 if right < n else counts[right - n])
             )
 
-        linkage_matrix = np.column_stack([
-            model.children_,
-            model.distances_,
-            counts,
-        ])
-
         if self.debug:
+            # Save the model and the optimal epsilon for debugging purposes -> histogram/dendogram
             print("saving  dendogram/histogram")
-            # TODO: save the dendograms, histograms, & chosen epsilon to investigate
-            #       after the clustering is finished in the form:
-            #self.debugData[self.covercounter] = {
-            #    "dend": "the dendogram data",
-            #    "hist": "the histogram data",
-            #    "eps": optimal_eps             # the chosen optimal epsilon for the actualClusterer
-            #}
+            self.debugData[self.covercounter] = {
+                "model": model,
+                "eps": merge_distance           
+            }
         
         # covercounter is just for the debug data dictionary
         self.covercounter += 1
         
-        # TODO: instantiate the actual clusterer to do the actual clustering
-        #self.actualClusterer = AgglomerativeClustering(
-        #    distance_threshold=optimal_eps,
-        #    n_clusters=None,
-        #    linkage="single")
+        #instantiate the actual clusterer to do the actual clustering
 
         self.actualClusterer = AgglomerativeClustering(
             distance_threshold=merge_distance,
