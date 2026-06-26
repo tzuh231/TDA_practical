@@ -98,6 +98,8 @@ class ClusterPipeline:
         self.n_components_bigger_1 = sum(
             1 for comp in nx.connected_components(self.nx_graph)
             if len(comp) > 1)
+        
+        self.component_member_counts = [len(comp) for comp in nx.connected_components(self.nx_graph)]
     
     def get_results(self):
         return self.n_components_bigger_1
@@ -109,127 +111,138 @@ class ClusterPipeline:
             node_size = 5, cmap="bwr"
         )
         ax.set_title(f"{self.year} {self.name}")
-    
 
-#### load the data ####
-df_data = pd.read_csv("./data/processed_data.csv")
-
-#### define groupings ####
-year_dates = {
-    "2009": ('2009-01-01','2010-01-01'),
-    "2010": ('2010-01-01','2011-01-01'),
-}
-sorted_year_keys = sorted(year_dates.keys(),key=int)
-year_indx = apply_func_to_year_dict_on_key(
-    year_dates,
-    lambda year: sorted_year_keys.index(year)
-)
-
-clustering_data_per_year = apply_func_to_year_dict_on_item(
-    year_dates,
-    lambda year, bounds: ClusteringPreperation(df_data,year,bounds)
-)
-
-clusterer_generators = {
-    "sing.link.": lambda eps: AgglomerativeClustering(
-        distance_threshold=eps,
-        n_clusters=None,
-        linkage="single"),
-
-    "only_threshold": lambda t_lm: DynamicSingleLinkage(
-        lowerMergerThreshold = t_lm,
-        epsilon_strategy="only_threshold"),
-    
-    "without_threshold": lambda N_bins: DynamicSingleLinkage(
-        N_bins = N_bins,
-        epsilon_strategy="without_threshold"),
-    
-    "with_threshold": lambda N_bins,t_lm: DynamicSingleLinkage(
-        N_bins = N_bins,
-        lowerMergerThreshold = t_lm,
-        epsilon_strategy="with_threshold"),
-}
-
-clusterer_good_settings = {
-    "sing.link.": {"eps": 0.5},
-    "only_threshold": {"t_lm": 0.25},
-    "without_threshold": {"N_bins": 52},
-    "with_threshold": {"N_bins": 52, "t_lm": 0.25},
-}
-
-clusterers = apply_func_to_year_dict_on_item(
-    clusterer_generators,
-    lambda name, clusterer_gen: clusterer_gen(**(clusterer_good_settings[name]))
-)
-
-clusterer_idx = {name:i for i,name in enumerate(clusterers.keys())}
-
-
-#### build the mapper graphs ####
-mapper = km.KeplerMapper()
-cover = km.Cover(
-    n_cubes=120,
-    perc_overlap=1-(1/4),
-)
-
-results = {"trial":[],"name":[],"params":[]}
-for year in year_dates.keys():
-    results[year] = []
-
-for trial in tqdm(range(100)):
-    clusterer_settings = {
-        "sing.link.": {"eps": random.uniform(0.1,0.5)}, # covers are maximaly 1/3 wide in pca coordinates
-        "only_threshold": {"t_lm": random.uniform(0.1,0.9)},               
-        "without_threshold": {"N_bins": random.randint(2,50)},
-        "with_threshold": {"N_bins": random.randint(2,50), "t_lm": random.uniform(0.1,0.9)},
-    }
-    clusterings_pc_py = apply_func_to_nested_grouping(
-        clusterers, clustering_data_per_year,
-        lambda name, clusterer, year,clustering_data: ClusterPipeline(
-            clustering_data, mapper, clusterer, cover, name, clusterer_settings[name]
-        )
-    )
-    for name,clustering_per_year in clusterings_pc_py.items():
-        results["trial"] = trial
-        results["name"].append(name)
-        results["params"].append(clusterer_settings[name])
-        for year, clustering in clustering_per_year.items():
-            results[year].append(clustering.n_components_bigger_1)
-
-results_df = pd.DataFrame(results)
-
-target_09 = 10
-target_10 = 37
-
-results_df["loss"] = np.abs(results_df["2009"] - target_09) + np.abs(results_df["2010"] - target_10)
-
-results_df.to_csv(f"./data/opti_results_{datetime.now().strftime('%y-%m-%d_%H-%M')}.csv")
-
-
-#### report important metrics ####
-print("explained pca component variance:\n",apply_func_to_year_dict_on_value(
-    clustering_data_per_year,
-    lambda clustering:  clustering.pca.explained_variance_ratio_
-))
-print("number of clusters w\ #nodes > 1:\n",apply_func_to_nested_grouping(
-    clusterers,year_dates,
-    lambda name,x,year,y:  clusterings_pc_py[name][year].get_results()
-))
-
-#### visualization ####
-fig, axs = plt.subplots(len(clusterers.keys()),len(year_dates.keys()))
-
-def add_cbar_right_of_axis(ax):
+def add_cbar_right_of_axis(ax,fig):
     cr = Colorizer(cmap="bwr")
     cr.set_clim(vmin=0.0,vmax=1.0)
 
     fig.colorbar(ColorizingArtist(cr),ax=ax,label="Democratic <- (member ratio) -> Repuplican")
 
-apply_func_to_nested_grouping(
-    clusterer_idx,year_indx,
-    lambda name, i_c, year, i_y: clusterings_pc_py[name][year].draw_nx_graph(
-        axs[i_c,i_y]
-    ))
-add_cbar_right_of_axis(axs[-1,-1])
+if __name__ == "__main__":
+    #### load the data ####
+    df_data = pd.read_csv("./data/processed_data.csv")
 
-plt.show()
+    #### define groupings ####
+    year_dates = {
+        "2009": ('2009-01-01','2010-01-01'),
+        "2010": ('2010-01-01','2011-01-01'),
+    }
+    sorted_year_keys = sorted(year_dates.keys(),key=int)
+    year_indx = apply_func_to_year_dict_on_key(
+        year_dates,
+        lambda year: sorted_year_keys.index(year)
+    )
+
+    clustering_data_per_year = apply_func_to_year_dict_on_item(
+        year_dates,
+        lambda year, bounds: ClusteringPreperation(df_data,year,bounds)
+    )
+
+    clusterer_generators = {
+        "sing.link.": lambda eps: AgglomerativeClustering(
+            distance_threshold=eps,
+            n_clusters=None,
+            linkage="single"),
+
+        "only_threshold": lambda t_lm: DynamicSingleLinkage(
+            lowerMergerThreshold = t_lm,
+            epsilon_strategy="only_threshold"),
+
+        "without_threshold": lambda N_bins: DynamicSingleLinkage(
+            N_bins = N_bins,
+            epsilon_strategy="without_threshold"),
+
+        "with_threshold": lambda N_bins,t_lm: DynamicSingleLinkage(
+            N_bins = N_bins,
+            lowerMergerThreshold = t_lm,
+            epsilon_strategy="with_threshold"),
+    }
+
+    clusterer_good_settings = {
+        "sing.link.": {"eps": 0.5},
+        "only_threshold": {"t_lm": 0.25},
+        "without_threshold": {"N_bins": 52},
+        "with_threshold": {"N_bins": 52, "t_lm": 0.25},
+    }
+
+    clusterers = apply_func_to_year_dict_on_item(
+        clusterer_generators,
+        lambda name, clusterer_gen: clusterer_gen(**(clusterer_good_settings[name]))
+    )
+
+    clusterer_idx = {name:i for i,name in enumerate(clusterers.keys())}
+
+
+    #### build the mapper graphs ####
+    mapper = km.KeplerMapper()
+    cover = km.Cover(
+        n_cubes=120,
+        perc_overlap=1-(1/4),
+    )
+
+    results = {"trial":[],"name":[],"params":[]}
+    for year in year_dates.keys():
+        results[year] = []
+
+    for trial in tqdm(range(100)):
+        clusterer_settings = {
+            "sing.link.": {"eps": random.uniform(0.1,0.5)}, # covers are maximaly 1/3 wide in pca coordinates
+            "only_threshold": {"t_lm": random.uniform(0.1,0.9)},               
+            "without_threshold": {"N_bins": random.randint(2,50)},
+            "with_threshold": {"N_bins": random.randint(2,50), "t_lm": random.uniform(0.1,0.9)},
+        }
+        clusterers = apply_func_to_year_dict_on_item(
+            clusterer_generators,
+            lambda name, clusterer_gen: clusterer_gen(**(clusterer_good_settings[name]))
+        )
+        clusterings_pc_py = apply_func_to_nested_grouping(
+            clusterer_generators, clustering_data_per_year,
+            lambda name, clusterer, year,clustering_data: ClusterPipeline(
+                clustering_data,
+                mapper,
+                clusterer( **(clusterer_settings[name]) ),
+                cover,
+                name,
+                clusterer_settings[name]
+            )
+        )
+        for name,clustering_per_year in clusterings_pc_py.items():
+            results["trial"] = trial
+            results["name"].append(name)
+            results["params"].append(clusterer_settings[name])
+            for year, clustering in clustering_per_year.items():
+                results[year].append(clustering.n_components_bigger_1)
+
+    results_df = pd.DataFrame(results)
+
+    target_09 = 10
+    target_10 = 37
+
+    results_df["loss"] = np.abs(results_df["2009"] - target_09) + np.abs(results_df["2010"] - target_10)
+
+    results_df.to_csv(f"./data/opti_results_{datetime.now().strftime('%y-%m-%d_%H-%M')}.csv")
+
+
+    ##### report important metrics ####
+    #print("explained pca component variance:\n",apply_func_to_year_dict_on_value(
+    #    clustering_data_per_year,
+    #    lambda clustering:  clustering.pca.explained_variance_ratio_
+    #))
+    #print("number of clusters w\ #nodes > 1:\n",apply_func_to_nested_grouping(
+    #    clusterers,year_dates,
+    #    lambda name,x,year,y:  clusterings_pc_py[name][year].get_results()
+    #))
+    #
+    ##### visualization ####
+    #fig, axs = plt.subplots(len(clusterers.keys()),len(year_dates.keys()))
+    #
+
+    #
+    #apply_func_to_nested_grouping(
+    #    clusterer_idx,year_indx,
+    #    lambda name, i_c, year, i_y: clusterings_pc_py[name][year].draw_nx_graph(
+    #        axs[i_c,i_y]
+    #    ))
+    #add_cbar_right_of_axis(axs[-1,-1])
+    #
+    #plt.show()
