@@ -109,7 +109,7 @@ class DynamicSingleLinkage:
     
 
     def calc_merge_distance_only_from_threshold(self, distances, n):
-        np.percentile(model.distances_, self.lowerMergerThreshold * 100)
+        merge_distance = np.percentile(distances, self.lowerMergerThreshold * 100)
         return merge_distance
 
 
